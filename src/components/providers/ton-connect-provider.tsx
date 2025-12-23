@@ -16,8 +16,7 @@ export function TonConnectProvider({ children }: TonConnectProviderProps) {
       : baseUrl
         ? `${baseUrl}/tonconnect-manifest.json`
         : "");
-console.log(manifestUrl);
-
+        
   return (
     <TonConnectUIProvider
       manifestUrl={manifestUrl}

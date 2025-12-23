@@ -7,6 +7,7 @@ import {
   useTonWallet,
 } from "@tonconnect/ui-react";
 import { useI18n } from "@/components/providers/i18n-context";
+import { TgsPlayer } from "@/components/ui/tgs-player";
 
 type TelegramStatus = "idle" | "checking" | "found" | "notfound";
 type PaymentId = "ton" | "usd";
@@ -15,6 +16,31 @@ type FieldErrors = {
   payment?: string;
   stars?: string;
 };
+type TelegramAuthPayload = {
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date?: number;
+  hash: string;
+};
+
+declare global {
+  interface Window {
+    Telegram?: {
+      Login?: {
+        auth: (
+          params: {
+            bot_id: number;
+            request_access?: boolean | "write" | "read";
+          },
+          callback: (user: TelegramAuthPayload | false) => void
+        ) => void;
+      };
+    };
+  }
+}
 
 const easeDelay = (ms: number) =>
   ({ "--delay": `${ms}ms` } as React.CSSProperties);
@@ -34,8 +60,11 @@ export function HomeContent() {
   const [stars, setStars] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isSending, setIsSending] = useState(false);
+  const [isTelegramReady, setIsTelegramReady] = useState(false);
+  const [isTelegramAuthLoading, setIsTelegramAuthLoading] = useState(false);
   const latestQuery = useRef("");
   const paymentRef = useRef<HTMLDivElement>(null);
+  const telegramBotId = Number(process.env.NEXT_PUBLIC_TELEGRAM_BOT_ID || 0);
   const tonReceiverAddress =
     process.env.NEXT_PUBLIC_TON_RECEIVER_ADDRESS ?? "";
   const tonNanotonsPerStar =
@@ -67,6 +96,41 @@ export function HomeContent() {
     document.addEventListener("pointerdown", handler);
     return () => document.removeEventListener("pointerdown", handler);
   }, []);
+
+  useEffect(() => {
+    if (!telegramBotId || typeof window === "undefined") return;
+    if (window.Telegram?.Login?.auth) {
+      setIsTelegramReady(true);
+      return;
+    }
+
+    const scriptId = "telegram-login-widget";
+    const existingScript = document.getElementById(scriptId);
+    if (existingScript) {
+      existingScript.addEventListener(
+        "load",
+        () => {
+          if (window.Telegram?.Login?.auth) {
+            setIsTelegramReady(true);
+          }
+        },
+        { once: true }
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = scriptId;
+    script.async = true;
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.onload = () => {
+      if (window.Telegram?.Login?.auth) {
+        setIsTelegramReady(true);
+      }
+    };
+    script.onerror = () => setIsTelegramReady(false);
+    document.body.appendChild(script);
+  }, [telegramBotId]);
 
   useEffect(() => {
     const trimmed = username.trim().replace(/^@+/, "");
@@ -142,6 +206,37 @@ export function HomeContent() {
         maximumFractionDigits: 2,
       })
     : null;
+
+  const handleTelegramLogin = () => {
+    if (!telegramBotId || !window.Telegram?.Login?.auth) {
+      return;
+    }
+
+    setIsTelegramAuthLoading(true);
+    window.Telegram.Login.auth(
+      { bot_id: telegramBotId, request_access: "write" },
+      async (user) => {
+        setIsTelegramAuthLoading(false);
+        if (!user) return;
+
+        try {
+          const response = await fetch("/api/telegram/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(user),
+          });
+          if (!response.ok) return;
+
+          const data = (await response.json()) as { redirectUrl?: string };
+          if (data?.redirectUrl) {
+            window.location.assign(data.redirectUrl);
+          }
+        } catch (error) {
+          console.error("Telegram auth failed:", error);
+        }
+      }
+    );
+  };
 
   const handleContinue = async () => {
     const nextErrors: FieldErrors = {};
@@ -230,7 +325,7 @@ export function HomeContent() {
         <section
           className="w-full rounded-[36px] border border-border/80 bg-surface/95 p-10 shadow-2xl backdrop-blur animate-fade-up animate-slower max-md:p-8 max-sm:rounded-[28px] max-sm:p-6"
         >
-          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-start max-md:gap-6 max-sm:gap-5">
+          <div className="grid gap-8 lg:grid-cols-[1fr_1.05fr] lg:items-center max-md:gap-6 max-sm:gap-5">
             <div>
               <div className="space-y-2">
                 <h2 className="font-display text-3xl font-bold text-foreground animate-fade-left max-md:text-2xl max-sm:text-xl">
@@ -438,26 +533,36 @@ export function HomeContent() {
               </div>
             </div>
 
-            <div className="relative overflow-hidden rounded-[28px] border border-border/70 bg-surface-muted p-7 shadow-sm max-md:p-6 max-sm:rounded-[24px] max-sm:p-5">
-              <div className="absolute -left-16 top-10 h-40 w-40 rounded-full bg-accent/20 blur-[50px]" />
-              <div className="absolute -right-10 bottom-10 h-44 w-44 rounded-full bg-accent/15 blur-[60px]" />
-              <div className="relative flex h-full min-h-[280px] flex-col justify-between max-sm:min-h-[240px]">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted max-sm:text-[10px]">
-                    {t("badge")}
-                  </p>
-                  <h3 className="mt-3 font-display text-2xl text-foreground max-sm:text-xl">
-                    {t("heroTitle")}
-                  </h3>
-                  <p className="mt-3 text-base text-muted max-sm:text-sm">
-                    {t("heroBody")}
-                  </p>
-                </div>
-                <div className="mt-6 flex items-center justify-between rounded-2xl border border-border/70 bg-surface px-5 py-3 text-sm font-semibold text-muted shadow-sm max-sm:px-4 max-sm:text-xs">
-                  <span>TON / USD</span>
-                  <span className="text-foreground">★ 100+</span>
-                </div>
-              </div>
+            <div className="relative min-h-[320px] max-sm:min-h-[260px]">
+              <TgsPlayer
+                src="/tgs/card.tgs"
+                unstyled
+                className="absolute inset-0 h-full w-full"
+              />
+            </div>
+          </div>
+        </section>
+        <section className="mt-10 w-full rounded-[36px] border border-border/80 bg-surface/95 p-10 shadow-2xl backdrop-blur animate-fade-up animate-slower max-md:mt-8 max-md:p-8 max-sm:mt-6 max-sm:rounded-[28px] max-sm:p-6">
+          <div className="grid gap-8 lg:grid-cols-[1.05fr_1fr] lg:items-center max-md:gap-6 max-sm:gap-5">
+            <div className="relative min-h-[280px] max-sm:min-h-[220px]">
+              <TgsPlayer
+                src="/tgs/card.tgs"
+                unstyled
+                className="absolute inset-0 h-full w-full"
+              />
+            </div>
+            <div className="flex flex-col items-center gap-5 text-center lg:items-start lg:text-left">
+              <p className="text-2xl font-semibold text-foreground max-md:text-xl max-sm:text-lg">
+                {t("referralHeadline")}
+              </p>
+              <button
+                type="button"
+                onClick={handleTelegramLogin}
+                disabled={!isTelegramReady || isTelegramAuthLoading}
+                className="ton-shine inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-base font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-70 max-sm:px-5 max-sm:py-2.5 max-sm:text-sm"
+              >
+                {t("loginTelegram")}
+              </button>
             </div>
           </div>
         </section>
