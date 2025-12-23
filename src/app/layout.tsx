@@ -35,7 +35,8 @@ export default async function RootLayout({
   const themeCookie = cookieStore.get("theme")?.value;
   const languageCookie = cookieStore.get("language")?.value;
   const initialTheme = themeCookie === "dark" ? "dark" : "light";
-  const initialLanguage = languageCookie === "uz" ? "uz" : "ru";
+  const initialLanguage =
+    languageCookie === "uz" || languageCookie === "en" ? languageCookie : "ru";
 
   return (
     <html lang={initialLanguage} data-theme={initialTheme}>

@@ -9,10 +9,11 @@ interface TgsPlayerProps {
   className?: string;
   style?: React.CSSProperties;
   unstyled?: boolean;
+  cacheKey?: string;
 }
 
 export const TgsPlayer = React.memo(
-  ({ src, className, style, unstyled = false }: TgsPlayerProps) => {
+  ({ src, className, style, unstyled = false, cacheKey }: TgsPlayerProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const animationRef = useRef<AnimationItem | null>(null);
     const [animationData, setAnimationData] = useState<object | null>(null);
@@ -24,18 +25,31 @@ export const TgsPlayer = React.memo(
     useEffect(() => {
       const fetchAndDecompress = async () => {
         try {
+          const storageKey = cacheKey || `tgs-cache:${src}`;
+          if (typeof window !== "undefined") {
+            const cached = window.sessionStorage.getItem(storageKey);
+            if (cached) {
+              setAnimationData(JSON.parse(cached));
+              return;
+            }
+          }
+
           const response = await fetch(src);
           const compressed = await response.arrayBuffer();
           const json = pako.inflate(new Uint8Array(compressed), {
             to: "string",
           });
           setAnimationData(JSON.parse(json));
+
+          if (typeof window !== "undefined") {
+            window.sessionStorage.setItem(storageKey, json);
+          }
         } catch (err) {
           console.error("TGS parse error:", err);
         }
       };
       fetchAndDecompress();
-    }, [src]);
+    }, [src, cacheKey]);
 
     useEffect(() => {
       if (!animationData || !containerRef.current) return;
