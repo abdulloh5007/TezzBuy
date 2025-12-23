@@ -19,6 +19,11 @@ const interDisplay = Inter({
 export const metadata: Metadata = {
   title: "Telegram Stars",
   description: "Быстрая покупка Telegram Stars с выбором способа оплаты.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+    shortcut: "/logo.png",
+  },
 };
 
 export default async function RootLayout({
