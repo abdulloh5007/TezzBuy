@@ -5,17 +5,18 @@ import { ProfileContent } from "@/components/profile/profile-content";
 import { ProfileUnauthorized } from "@/components/profile/profile-unauthorized";
 
 type UserPageProps = {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 };
 
 export default async function UserPage({ params }: UserPageProps) {
+  const { slug } = await params;
   const session = await readSession();
   if (!session) {
     return <ProfileUnauthorized />;
   }
 
   const target = session.username ? session.username : String(session.id);
-  if (params.slug !== target) {
+  if (slug !== target) {
     redirect(`/u/${encodeURIComponent(target)}`);
   }
 
